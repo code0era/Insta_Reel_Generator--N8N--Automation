@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  # ── Ollama (LLM) ──────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  # ── Stable Diffusion (Automatic1111) ───────────────────
+  stable-diffusion:
+    image: universonic/stable-diffusion-webui:latest
+    container_name: stable-diffusion
+    ports:
+      - "7860:7860"
+    volumes:
+      - sd_models:/app/models
+      - sd_outputs:/app/outputs
+    environment:
+      - CLI_ARGS=--api --nowebui --listen
+    restart: unless-stopped
+
+  # ── Coqui TTS ─────────────────────────────────────────
+  coqui-tts:
+    image: ghcr.io/coqui-ai/tts:latest
+    container_name: coqui-tts
+    ports:
+      - "5002:5002"
+    entrypoint: python -m TTS.server.server --port 5002 --use_cuda false
+    restart: unless-stopped
+
+  # ── Python Scripts Runner ──────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: reels-agent
+    volumes:
+      - ./scripts:/app/scripts
+      - ./output:/app/output
+      - ./music:/app/music
+      - ./logs:/app/logs
+    env_file: .env
+    depends_on:
+      - ollama
+      - stable-diffusion
+      - coqui-tts
+    restart: unless-stopped
+    command: tail -f /dev/null   # kept alive; n8n executes scripts via HTTP
+
+  # ── n8n (Automation Engine) ────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/home/node/n8n-workflows
+    depends_on:
+      - agent
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  sd_models:
+  sd_outputs:
+  n8n_data:
