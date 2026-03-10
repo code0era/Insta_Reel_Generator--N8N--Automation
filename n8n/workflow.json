@@ -1,0 +1,259 @@
+{
+    "name": "Instagram Reels Automation",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "hours",
+                            "hoursInterval": 6
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "position": [
+                240,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "python /app/scripts/trend_scraper.py"
+            },
+            "id": "scrape-trends",
+            "name": "Scrape Trending Topic",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                460,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.item.json.stdout;\nconst data = JSON.parse(raw);\nreturn [{ json: { topic: data.topic } }];"
+            },
+            "id": "parse-topic",
+            "name": "Parse Topic",
+            "type": "n8n-nodes-base.code",
+            "position": [
+                660,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "=python /app/scripts/idea_generator.py \"{{ $json.topic }}\""
+            },
+            "id": "generate-idea",
+            "name": "Generate Reel Idea (LLM)",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                880,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.item.json.stdout;\nconst idea = JSON.parse(raw);\nreturn idea.scenes.map(s => ({ json: { ...s, title: idea.title, narration: idea.narration, caption: idea.caption, hashtags: idea.hashtags } }));"
+            },
+            "id": "split-scenes",
+            "name": "Split into Scenes",
+            "type": "n8n-nodes-base.code",
+            "position": [
+                1100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "=python /app/scripts/image_generator.py \"{{ $json.image_prompt }}\" {{ $json.scene }} /app/output/images/current"
+            },
+            "id": "generate-images",
+            "name": "Generate Scene Images (SD)",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                1320,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst first = items[0].json;\nreturn [{ json: { narration: first.narration, caption: first.caption, hashtags: first.hashtags } }];"
+            },
+            "id": "collect-scenes",
+            "name": "Collect After Images",
+            "type": "n8n-nodes-base.code",
+            "position": [
+                1540,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "=python /app/scripts/tts_generator.py \"{{ $json.narration }}\" /app/output/audio/narration.wav"
+            },
+            "id": "generate-tts",
+            "name": "Generate Narration (TTS)",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                1760,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "python /app/scripts/video_creator.py /app/output/images/current /app/output/audio/narration.wav /app/music/background.mp3 /app/output/videos/reel.mp4"
+            },
+            "id": "create-video",
+            "name": "Create 30s Video (FFmpeg)",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                1980,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "=python /app/scripts/instagram_poster.py /app/output/videos/reel.mp4 \"{{ $json.caption }}\n\n{{ $json.hashtags }}\""
+            },
+            "id": "post-instagram",
+            "name": "Post to Instagram",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                2200,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "=python /app/scripts/notifier.py \"Reel Posted!\" \"Your Instagram Reel has been published successfully. Caption: {{ $json.caption }}\""
+            },
+            "id": "send-notification",
+            "name": "Send Email Notification",
+            "type": "n8n-nodes-base.executeCommand",
+            "position": [
+                2420,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Scrape Trending Topic",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scrape Trending Topic": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Topic",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Topic": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Reel Idea (LLM)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Reel Idea (LLM)": {
+            "main": [
+                [
+                    {
+                        "node": "Split into Scenes",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split into Scenes": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Scene Images (SD)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Scene Images (SD)": {
+            "main": [
+                [
+                    {
+                        "node": "Collect After Images",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Collect After Images": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Narration (TTS)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Narration (TTS)": {
+            "main": [
+                [
+                    {
+                        "node": "Create 30s Video (FFmpeg)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create 30s Video (FFmpeg)": {
+            "main": [
+                [
+                    {
+                        "node": "Post to Instagram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Post to Instagram": {
+            "main": [
+                [
+                    {
+                        "node": "Send Email Notification",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}
