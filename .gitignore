@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Output / generated content
+output/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
